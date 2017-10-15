@@ -183,14 +183,6 @@ unsafe impl Alloc for Heap {
     }
 }
 
-/// An arbitrary non-null address to represent zero-size allocations.
-///
-/// This preserves the non-null invariant for types like `Box<T>`. The address
-/// may overlap with non-zero-size memory allocations.
-#[rustc_deprecated(since = "1.19", reason = "Use Unique/Shared::empty() instead")]
-#[unstable(feature = "heap_api", issue = "27700")]
-pub const EMPTY: *mut () = !0 as *mut ();
-
 #[cfg(test)]
 mod tests {
     extern crate test;
