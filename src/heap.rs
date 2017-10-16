@@ -8,13 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-#![unstable(feature = "allocator_api",
-            reason = "the precise API and guarantees it provides may be tweaked \
-                      slightly, especially to possibly take into account the \
-                      types being stored to make room for a future \
-                      tracing garbage collector",
-            issue = "32838")]
-
 use core::mem::{self, ManuallyDrop};
 use core::usize;
 
