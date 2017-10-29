@@ -6,6 +6,8 @@ use core::ops::{ Deref, DerefMut };
 use core::ptr::{ self, Unique };
 
 /// Pointer to heap-allocated value
+#[cfg_attr(not(test), lang = "owned_box")]
+#[fundamental]
 pub struct Box<T: ?Sized, A: Alloc = Heap> {
     ptr: Unique<T>,
     alloc: A,
