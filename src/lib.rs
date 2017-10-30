@@ -599,7 +599,7 @@ pub unsafe trait Alloc {
     /// returned by `alloc_excess` locally, this method is likely to
     /// produce useful results.
     #[inline]
-    fn usable_size(&self, layout: &Layout) -> (usize, usize) { (layout.size(), layout.size()) }
+    fn usable_size(&self, layout: Layout) -> (usize, usize) { (layout.size(), layout.size()) }
 
     // == METHODS FOR MEMORY REUSE ==
     // realloc. alloc_excess, realloc_excess
@@ -737,7 +737,7 @@ pub unsafe trait Alloc {
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
     unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
-        let usable_size = self.usable_size(&layout);
+        let usable_size = self.usable_size(layout);
         self.alloc(layout).map(|p| Excess(p, usable_size.1))
     }
 
@@ -762,7 +762,7 @@ pub unsafe trait Alloc {
                              ptr: *mut u8,
                              layout: Layout,
                              new_layout: Layout) -> Result<Excess, AllocErr> {
-        let usable_size = self.usable_size(&new_layout);
+        let usable_size = self.usable_size(new_layout);
         self.realloc(ptr, layout, new_layout).map(|p| Excess(p, usable_size.1))
     }
 
@@ -809,7 +809,7 @@ pub unsafe trait Alloc {
         let _ = ptr; // this default implementation doesn't care about the actual address.
         debug_assert!(new_layout.size >= layout.size);
         debug_assert!(new_layout.align == layout.align);
-        let (_l, u) = self.usable_size(&layout);
+        let (_l, u) = self.usable_size(layout);
         // _l <= layout.size()                       [guaranteed by usable_size()]
         //       layout.size() <= new_layout.size()  [required by this method]
         if new_layout.size <= u {
@@ -867,7 +867,7 @@ pub unsafe trait Alloc {
         let _ = ptr; // this default implementation doesn't care about the actual address.
         debug_assert!(new_layout.size <= layout.size);
         debug_assert!(new_layout.align == layout.align);
-        let (l, _u) = self.usable_size(&layout);
+        let (l, _u) = self.usable_size(layout);
         //                      layout.size() <= _u  [guaranteed by usable_size()]
         // new_layout.size() <= layout.size()        [required by this method]
         if l <= new_layout.size {
@@ -1073,7 +1073,7 @@ unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
     unsafe fn grow_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().grow_in_place(ptr, old_l, new_l) }
     unsafe fn shrink_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().shrink_in_place(ptr, old_l, new_l) }
 
-    fn usable_size(&self, l: &Layout) -> (usize, usize) { self.deref().usable_size(l) }
+    fn usable_size(&self, l: Layout) -> (usize, usize) { self.deref().usable_size(l) }
 
     fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_one() }
     unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) { self.deref_mut().dealloc_one(ptr) }
