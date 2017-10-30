@@ -12,6 +12,7 @@ use core::cmp;
 use core::fmt;
 use core::mem;
 use core::usize;
+use core::ops::DerefMut;
 use core::ptr::{self, Unique};
 
 /// Represents the combination of a starting address and
@@ -1051,4 +1052,25 @@ pub unsafe trait Alloc {
             },
         }
     }
+}
+
+unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
+    unsafe fn alloc(&mut self, l: Layout) -> Result<*mut u8, AllocErr> { self.deref_mut().alloc(l) }
+    unsafe fn dealloc(&mut self, ptr: *mut u8, l: Layout) { self.deref_mut().dealloc(ptr, l) }
+    unsafe fn realloc(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<*mut u8, AllocErr> { self.deref_mut().realloc(ptr, old_l, new_l) }
+    unsafe fn alloc_zeroed(&mut self, l: Layout) -> Result<*mut u8, AllocErr> { self.deref_mut().alloc_zeroed(l) }
+    unsafe fn alloc_excess(&mut self, l: Layout) -> Result<Excess, AllocErr> { self.deref_mut().alloc_excess(l) }
+    unsafe fn realloc_excess(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<Excess, AllocErr> { self.deref_mut().realloc_excess(ptr, old_l, new_l) }
+    unsafe fn grow_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().grow_in_place(ptr, old_l, new_l) }
+    unsafe fn shrink_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().shrink_in_place(ptr, old_l, new_l) }
+
+    fn usable_size(&self, l: &Layout) -> (usize, usize) { self.deref().usable_size(l) }
+
+    fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_one() }
+    unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) { self.deref_mut().dealloc_one(ptr) }
+    fn alloc_array<T>(&mut self, n: usize) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_array(n) }
+    unsafe fn realloc_array<T>(&mut self, ptr: Unique<T>, old_n: usize, new_n: usize) -> Result<Unique<T>, AllocErr> { self.deref_mut().realloc_array(ptr, old_n, new_n) }
+    unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> { self.deref_mut().dealloc_array(ptr, n) }
+
+    fn oom(&mut self, e: AllocErr) -> ! { self.deref_mut().oom(e) }
 }
