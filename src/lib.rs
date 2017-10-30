@@ -673,14 +673,9 @@ pub unsafe trait Alloc {
                       new_layout: Layout) -> Result<*mut u8, AllocErr> {
         let new_size = new_layout.size();
         let old_size = layout.size();
-        let aligns_match = layout.align == new_layout.align;
 
-        if new_size >= old_size && aligns_match {
-            if let Ok(()) = self.grow_in_place(ptr, layout.clone(), new_layout.clone()) {
-                return Ok(ptr);
-            }
-        } else if new_size < old_size && aligns_match {
-            if let Ok(()) = self.shrink_in_place(ptr, layout.clone(), new_layout.clone()) {
+        if layout.align == new_layout.align {
+            if let Ok(()) = self.resize_in_place(ptr, layout.clone(), new_layout.clone()) {
                 return Ok(ptr);
             }
         }
@@ -766,7 +761,7 @@ pub unsafe trait Alloc {
         self.realloc(ptr, layout, new_layout).map(|p| Excess(p, usable_size.1))
     }
 
-    /// Attempts to extend the allocation referenced by `ptr` to fit `new_layout`.
+    /// Attempts to resize the allocation referenced by `ptr` to fit `new_layout`.
     ///
     /// If this returns `Ok`, then the allocator has asserted that the
     /// memory block referenced by `ptr` now fits `new_layout`, and thus can
@@ -776,61 +771,11 @@ pub unsafe trait Alloc {
     ///
     /// Regardless of what this method returns, ownership of the
     /// memory block referenced by `ptr` has not been transferred, and
-    /// the contents of the memory block are unaltered.
-    ///
-    /// # Safety
-    ///
-    /// This function is unsafe because undefined behavior can result
-    /// if the caller does not ensure all of the following:
-    ///
-    /// * `ptr` must be currently allocated via this allocator,
-    ///
-    /// * `layout` must *fit* the `ptr` (see above); note the
-    ///   `new_layout` argument need not fit it,
-    ///
-    /// * `new_layout.size()` must not be less than `layout.size()`,
-    ///
-    /// * `new_layout.align()` must equal `layout.align()`.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Err(CannotReallocInPlace)` when the allocator is
-    /// unable to assert that the memory block referenced by `ptr`
-    /// could fit `layout`.
-    ///
-    /// Note that one cannot pass `CannotReallocInPlace` to the `oom`
-    /// method; clients are expected either to be able to recover from
-    /// `grow_in_place` failures without aborting, or to fall back on
-    /// another reallocation method before resorting to an abort.
-    unsafe fn grow_in_place(&mut self,
-                            ptr: *mut u8,
-                            layout: Layout,
-                            new_layout: Layout) -> Result<(), CannotReallocInPlace> {
-        let _ = ptr; // this default implementation doesn't care about the actual address.
-        debug_assert!(new_layout.size >= layout.size);
-        debug_assert!(new_layout.align == layout.align);
-        let (_l, u) = self.usable_size(layout);
-        // _l <= layout.size()                       [guaranteed by usable_size()]
-        //       layout.size() <= new_layout.size()  [required by this method]
-        if new_layout.size <= u {
-            return Ok(());
-        } else {
-            return Err(CannotReallocInPlace);
-        }
-    }
-
-    /// Attempts to shrink the allocation referenced by `ptr` to fit `new_layout`.
-    ///
-    /// If this returns `Ok`, then the allocator has asserted that the
-    /// memory block referenced by `ptr` now fits `new_layout`, and
-    /// thus can only be used to carry data of that smaller
-    /// layout. (The allocator is allowed to take advantage of this,
-    /// carving off portions of the block for reuse elsewhere.) The
-    /// truncated contents of the block within the smaller layout are
-    /// unaltered, and ownership of block has not been transferred.
+    /// the contents of the memory block up to the lesser of the old and new
+    /// sizes are unaltered.
     ///
     /// If this returns `Err`, then the memory block is considered to
-    /// still represent the original (larger) `layout`. None of the
+    /// still represent the original `layout`. None of the
     /// block has been carved off for reuse elsewhere, ownership of
     /// the memory block has not been transferred, and the contents of
     /// the memory block are unaltered.
@@ -845,9 +790,6 @@ pub unsafe trait Alloc {
     /// * `layout` must *fit* the `ptr` (see above); note the
     ///   `new_layout` argument need not fit it,
     ///
-    /// * `new_layout.size()` must not be greater than `layout.size()`
-    ///   (and must be greater than zero),
-    ///
     /// * `new_layout.align()` must equal `layout.align()`.
     ///
     /// # Errors
@@ -858,23 +800,18 @@ pub unsafe trait Alloc {
     ///
     /// Note that one cannot pass `CannotReallocInPlace` to the `oom`
     /// method; clients are expected either to be able to recover from
-    /// `shrink_in_place` failures without aborting, or to fall back
-    /// on another reallocation method before resorting to an abort.
-    unsafe fn shrink_in_place(&mut self,
+    /// `resize_in_place` failures without aborting, or to fall back on
+    /// another reallocation method before resorting to an abort.
+    unsafe fn resize_in_place(&mut self,
                               ptr: *mut u8,
                               layout: Layout,
                               new_layout: Layout) -> Result<(), CannotReallocInPlace> {
         let _ = ptr; // this default implementation doesn't care about the actual address.
-        debug_assert!(new_layout.size <= layout.size);
         debug_assert!(new_layout.align == layout.align);
-        let (l, _u) = self.usable_size(layout);
-        //                      layout.size() <= _u  [guaranteed by usable_size()]
-        // new_layout.size() <= layout.size()        [required by this method]
-        if l <= new_layout.size {
-            return Ok(());
-        } else {
-            return Err(CannotReallocInPlace);
-        }
+        let (l, u) = self.usable_size(layout);
+        // l ≤ layout.size() ≤ u [guaranteed by usable_size()]
+        if u >= new_layout.size && l <= new_layout.size { Ok(()) }
+        else { Err(CannotReallocInPlace) }
     }
 
 
@@ -1070,8 +1007,7 @@ unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
     unsafe fn alloc_zeroed(&mut self, l: Layout) -> Result<*mut u8, AllocErr> { self.deref_mut().alloc_zeroed(l) }
     unsafe fn alloc_excess(&mut self, l: Layout) -> Result<Excess, AllocErr> { self.deref_mut().alloc_excess(l) }
     unsafe fn realloc_excess(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<Excess, AllocErr> { self.deref_mut().realloc_excess(ptr, old_l, new_l) }
-    unsafe fn grow_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().grow_in_place(ptr, old_l, new_l) }
-    unsafe fn shrink_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().shrink_in_place(ptr, old_l, new_l) }
+    unsafe fn resize_in_place(&mut self, ptr: *mut u8, old_l: Layout, new_l: Layout) -> Result<(), CannotReallocInPlace> { self.deref_mut().resize_in_place(ptr, old_l, new_l) }
 
     fn usable_size(&self, l: Layout) -> (usize, usize) { self.deref().usable_size(l) }
 
