@@ -996,6 +996,14 @@ pub unsafe trait Alloc {
     }
 }
 
+#[derive(Clone, Copy, Default, Debug)]
+pub struct NullAllocator(());
+
+unsafe impl Alloc for NullAllocator {
+    unsafe fn alloc(&mut self, _: Layout) -> Result<*mut u8, AllocErr> { Err(AllocErr::Unsupported { details: "" }) }
+    unsafe fn dealloc(&mut self, _: *mut u8, _: Layout) {}
+}
+
 unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
     unsafe fn alloc(&mut self, l: Layout) -> Result<*mut u8, AllocErr> { self.deref_mut().alloc(l) }
     unsafe fn dealloc(&mut self, ptr: *mut u8, l: Layout) { self.deref_mut().dealloc(ptr, l) }
