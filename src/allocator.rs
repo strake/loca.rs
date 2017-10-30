@@ -898,8 +898,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
-    fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr>
-        where Self: Sized {
+    fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> {
         let k = Layout::new::<T>();
         if k.size() > 0 {
             unsafe { self.alloc(k).map(|p| Unique::new_unchecked(p as *mut T)) }
@@ -925,8 +924,7 @@ pub unsafe trait Alloc {
     /// * `ptr` must denote a block of memory currently allocated via this allocator
     ///
     /// * the layout of `T` must *fit* that block of memory.
-    unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>)
-        where Self: Sized {
+    unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) {
         let raw_ptr = ptr.as_ptr() as *mut u8;
         let k = Layout::new::<T>();
         if k.size() > 0 {
@@ -964,8 +962,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
-    fn alloc_array<T>(&mut self, n: usize) -> Result<Unique<T>, AllocErr>
-        where Self: Sized {
+    fn alloc_array<T>(&mut self, n: usize) -> Result<Unique<T>, AllocErr> {
         match Layout::array::<T>(n) {
             Some(ref layout) if layout.size() > 0 => {
                 unsafe {
@@ -1011,8 +1008,7 @@ pub unsafe trait Alloc {
     unsafe fn realloc_array<T>(&mut self,
                                ptr: Unique<T>,
                                n_old: usize,
-                               n_new: usize) -> Result<Unique<T>, AllocErr>
-        where Self: Sized {
+                               n_new: usize) -> Result<Unique<T>, AllocErr> {
         match (Layout::array::<T>(n_old), Layout::array::<T>(n_new), ptr.as_ptr()) {
             (Some(ref k_old), Some(ref k_new), ptr) if k_old.size() > 0 && k_new.size() > 0 => {
                 self.realloc(ptr as *mut u8, k_old.clone(), k_new.clone())
@@ -1044,8 +1040,7 @@ pub unsafe trait Alloc {
     /// constraints.
     ///
     /// Always returns `Err` on arithmetic overflow.
-    unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr>
-        where Self: Sized {
+    unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> {
         let raw_ptr = ptr.as_ptr() as *mut u8;
         match Layout::array::<T>(n) {
             Some(ref k) if k.size() > 0 => {
