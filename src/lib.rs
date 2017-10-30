@@ -11,10 +11,6 @@
 #![no_std]
 
 #![feature(core_intrinsics)]
-#![feature(fundamental)]
-#![feature(lang_items)]
-#![feature(rustc_attrs)]
-#![feature(test)]
 #![feature(unique)]
 
 use core::cmp;
