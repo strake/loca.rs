@@ -879,6 +879,8 @@ pub unsafe trait Alloc {
     ///
     /// Captures a common usage pattern for allocators.
     ///
+    /// Returns actual size of array allocated.
+    ///
     /// The returned block is suitable for passing to the
     /// `alloc`/`realloc` methods of this allocator.
     ///
@@ -905,13 +907,13 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
-    fn alloc_array<T>(&mut self, n: usize) -> Result<Unique<T>, AllocErr> {
+    fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> {
         match Layout::array::<T>(n) {
-            Some(ref layout) if layout.size() > 0 => {
-                unsafe {
-                    self.alloc(layout.clone()).map(|p| Unique::new_unchecked(p as *mut T))
-                }
-            },
+            Some(ref layout) if layout.size() > 0 => { unsafe {
+                self.alloc_excess(layout.clone())
+                    .map(|Excess(p, n)| (Unique::new_unchecked(p as *mut T),
+                                         n / mem::size_of::<T>()))
+            } },
             _ => Err(AllocErr::invalid_input("invalid layout for alloc_array")),
         }
     }
@@ -921,6 +923,8 @@ pub unsafe trait Alloc {
     /// `n_new` instances of `T`.
     ///
     /// Captures a common usage pattern for allocators.
+    ///
+    /// Returns actual size of array allocated.
     ///
     /// The returned block is suitable for passing to the
     /// `alloc`/`realloc` methods of this allocator.
@@ -951,11 +955,12 @@ pub unsafe trait Alloc {
     unsafe fn realloc_array<T>(&mut self,
                                ptr: Unique<T>,
                                n_old: usize,
-                               n_new: usize) -> Result<Unique<T>, AllocErr> {
+                               n_new: usize) -> Result<(Unique<T>, usize), AllocErr> {
         match (Layout::array::<T>(n_old), Layout::array::<T>(n_new), ptr.as_ptr()) {
             (Some(ref k_old), Some(ref k_new), ptr) if k_old.size() > 0 && k_new.size() > 0 => {
-                self.realloc(ptr as *mut u8, k_old.clone(), k_new.clone())
-                    .map(|p|Unique::new_unchecked(p as *mut T))
+                self.realloc_excess(ptr as *mut u8, k_old.clone(), k_new.clone())
+                    .map(|Excess(p, n)| (Unique::new_unchecked(p as _),
+                                         n / mem::size_of::<T>()))
             }
             _ => {
                 Err(AllocErr::invalid_input("invalid layout for realloc_array"))
@@ -1017,8 +1022,8 @@ unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
 
     fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_one() }
     unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) { self.deref_mut().dealloc_one(ptr) }
-    fn alloc_array<T>(&mut self, n: usize) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_array(n) }
-    unsafe fn realloc_array<T>(&mut self, ptr: Unique<T>, old_n: usize, new_n: usize) -> Result<Unique<T>, AllocErr> { self.deref_mut().realloc_array(ptr, old_n, new_n) }
+    fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().alloc_array(n) }
+    unsafe fn realloc_array<T>(&mut self, ptr: Unique<T>, old_n: usize, new_n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().realloc_array(ptr, old_n, new_n) }
     unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> { self.deref_mut().dealloc_array(ptr, n) }
 
     fn oom(&mut self, e: AllocErr) -> ! { self.deref_mut().oom(e) }
