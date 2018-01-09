@@ -10,15 +10,17 @@
 
 #![no_std]
 
-#![feature(core_intrinsics)]
-#![feature(unique)]
+extern crate abort;
+extern crate ptr as ptr_;
+use ptr_::Unique;
 
+use abort::abort;
 use core::cmp;
 use core::fmt;
 use core::mem;
 use core::usize;
 use core::ops::DerefMut;
-use core::ptr::{self, Unique};
+use core::ptr;
 
 /// Represents the combination of a starting address and
 /// a total capacity of the returned block.
@@ -563,7 +565,7 @@ pub unsafe trait Alloc {
     /// instead they should return an appropriate error from the
     /// invoked method, and let the client decide whether to invoke
     /// this `oom` method in response.
-    fn oom(&mut self, _: AllocErr) -> ! { unsafe { ::core::intrinsics::abort() } }
+    fn oom(&mut self, _: AllocErr) -> ! { abort() }
 
     // == ALLOCATOR-SPECIFIC QUANTITIES AND LIMITS ==
     // usable_size

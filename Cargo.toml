@@ -4,3 +4,7 @@ version = "0.5.3"
 authors = ["M Farkas-Dyck <strake888@gmail.com>"]
 description = "memory allocation"
 license = "MIT OR Apache-2.0"
+
+[dependencies]
+abort = "0.1"
+ptr = "0.1.2"
