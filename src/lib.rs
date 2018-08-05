@@ -10,11 +10,9 @@
 
 #![no_std]
 
-extern crate abort;
 extern crate ptr as ptr_;
 use ptr_::Unique;
 
-use abort::abort;
 use core::cmp;
 use core::fmt;
 use core::mem;
@@ -565,7 +563,7 @@ pub unsafe trait Alloc {
     /// instead they should return an appropriate error from the
     /// invoked method, and let the client decide whether to invoke
     /// this `oom` method in response.
-    fn oom(&mut self, _: AllocErr) -> ! { abort() }
+    fn oom(&mut self, _: AllocErr) -> ! { loop {} }
 
     // == ALLOCATOR-SPECIFIC QUANTITIES AND LIMITS ==
     // usable_size

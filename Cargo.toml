@@ -6,5 +6,4 @@ description = "memory allocation"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-abort = "0.1"
 ptr = "0.1.2"
