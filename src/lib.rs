@@ -10,9 +10,11 @@
 
 #![no_std]
 
+extern crate abort;
 extern crate ptr as ptr_;
 use ptr_::Unique;
 
+use abort::abort;
 use core::cmp;
 use core::fmt;
 use core::mem;
@@ -514,6 +516,10 @@ pub unsafe trait Alloc {
     /// a strict requirement. (Specifically: it is *legal* to
     /// implement this trait atop an underlying native allocation
     /// library that aborts on memory exhaustion.)
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// allocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr>;
 
     /// Deallocate the memory referenced by `ptr`.
@@ -532,6 +538,34 @@ pub unsafe trait Alloc {
     ///   alignment of the `layout` must match the alignment used
     ///   to allocate that block of memory.
     unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout);
+
+    /// Allocator-specific method for signaling an out-of-memory
+    /// condition.
+    ///
+    /// `oom` aborts the thread or process, optionally performing
+    /// cleanup or logging diagnostic information before panicking or
+    /// aborting.
+    ///
+    /// `oom` is meant to be used by clients unable to cope with an
+    /// unsatisfied allocation request (signaled by an error such as
+    /// `AllocErr::Exhausted`), and wish to abandon computation rather
+    /// than attempt to recover locally. Such clients should pass the
+    /// signaling error value back into `oom`, where the allocator
+    /// may incorporate that error value into its diagnostic report
+    /// before aborting.
+    ///
+    /// Implementations of the `oom` method are discouraged from
+    /// infinitely regressing in nested calls to `oom`. In
+    /// practice this means implementors should eschew allocating,
+    /// especially from `self` (directly or indirectly).
+    ///
+    /// Implementations of the allocation and reallocation methods
+    /// (e.g. `alloc`, `alloc_one`, `realloc`) are discouraged from
+    /// panicking (or aborting) in the event of memory exhaustion;
+    /// instead they should return an appropriate error from the
+    /// invoked method, and let the client decide whether to invoke
+    /// this `oom` method in response.
+    fn oom(&mut self, _: AllocErr) -> ! { abort() }
 
     // == ALLOCATOR-SPECIFIC QUANTITIES AND LIMITS ==
     // usable_size
@@ -627,6 +661,10 @@ pub unsafe trait Alloc {
     /// a strict requirement. (Specifically: it is *legal* to
     /// implement this trait atop an underlying native allocation
     /// library that aborts on memory exhaustion.)
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// reallocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     unsafe fn realloc(&mut self,
                       ptr: *mut u8,
                       layout: Layout,
@@ -661,6 +699,10 @@ pub unsafe trait Alloc {
     /// Returning `Err` indicates that either memory is exhausted or
     /// `layout` does not meet allocator's size or alignment
     /// constraints, just as in `alloc`.
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// allocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     unsafe fn alloc_zeroed(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
         let size = layout.size();
         let p = self.alloc(layout);
@@ -683,6 +725,10 @@ pub unsafe trait Alloc {
     /// Returning `Err` indicates that either memory is exhausted or
     /// `layout` does not meet allocator's size or alignment
     /// constraints, just as in `alloc`.
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// allocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
         let usable_size = self.usable_size(layout);
         self.alloc(layout).map(|p| Excess(p, usable_size.1))
@@ -701,6 +747,10 @@ pub unsafe trait Alloc {
     /// Returning `Err` indicates that either memory is exhausted or
     /// `layout` does not meet allocator's size or alignment
     /// constraints, just as in `realloc`.
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// reallocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     unsafe fn realloc_excess(&mut self,
                              ptr: *mut u8,
                              layout: Layout,
@@ -745,6 +795,11 @@ pub unsafe trait Alloc {
     /// Returns `Err(CannotReallocInPlace)` when the allocator is
     /// unable to assert that the memory block referenced by `ptr`
     /// could fit `layout`.
+    ///
+    /// Note that one cannot pass `CannotReallocInPlace` to the `oom`
+    /// method; clients are expected either to be able to recover from
+    /// `resize_in_place` failures without aborting, or to fall back on
+    /// another reallocation method before resorting to an abort.
     unsafe fn resize_in_place(&mut self,
                               ptr: *mut u8,
                               layout: Layout,
@@ -784,6 +839,10 @@ pub unsafe trait Alloc {
     ///
     /// For zero-sized `T`, may return either of `Ok` or `Err`, but
     /// will *not* yield undefined behavior.
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// allocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> {
         let k = Layout::new::<T>();
         if k.size() > 0 {
@@ -846,6 +905,10 @@ pub unsafe trait Alloc {
     /// `Err`, but will *not* yield undefined behavior.
     ///
     /// Always returns `Err` on arithmetic overflow.
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// allocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> {
         match Layout::array::<T>(n) {
             Some(ref layout) if layout.size() > 0 => { unsafe {
@@ -887,6 +950,10 @@ pub unsafe trait Alloc {
     /// `Err`, but will *not* yield undefined behavior.
     ///
     /// Always returns `Err` on arithmetic overflow.
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// reallocation error are encouraged to call the allocator's `oom`
+    /// method, rather than directly invoking `panic!` or similar.
     unsafe fn realloc_array<T>(&mut self,
                                ptr: Unique<T>,
                                n_old: usize,
@@ -960,4 +1027,6 @@ unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
     fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().alloc_array(n) }
     unsafe fn realloc_array<T>(&mut self, ptr: Unique<T>, old_n: usize, new_n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().realloc_array(ptr, old_n, new_n) }
     unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> { self.deref_mut().dealloc_array(ptr, n) }
+
+    fn oom(&mut self, e: AllocErr) -> ! { self.deref_mut().oom(e) }
 }
