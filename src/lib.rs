@@ -121,6 +121,7 @@ impl Layout {
     pub fn align(&self) -> NonZeroUsize { self.align }
 
     /// Constructs a `Layout` suitable for holding a value of type `T`.
+    #[inline]
     pub fn new<T>() -> Self {
         Layout { size: mem::size_of::<T>(),
                  align: unsafe { NonZeroUsize::new_unchecked(mem::align_of::<T>()) } }
@@ -129,6 +130,7 @@ impl Layout {
     /// Produces layout describing a record that could be used to
     /// allocate backing structure for `T` (which could be a trait
     /// or other unsized type like a slice).
+    #[inline]
     pub fn for_value<T: ?Sized>(t: &T) -> Self {
         let (size, align) = (mem::size_of_val(t), mem::align_of_val(t));
         Layout::from_size_align(size, align).unwrap()
@@ -230,6 +232,7 @@ impl Layout {
     /// (assuming that the record itself starts at offset 0).
     ///
     /// On arithmetic overflow, returns `None`.
+    #[inline]
     pub fn extend(&self, next: Self) -> Option<(Self, usize)> {
         let new_align = cmp::max(self.align, next.align);
         let realigned = Layout::from_size_align(self.size, new_align.get())?;
@@ -253,6 +256,7 @@ impl Layout {
     /// aligned.
     ///
     /// On arithmetic overflow, returns `None`.
+    #[inline]
     pub fn repeat_packed(&self, n: usize) -> Option<Self> {
         Layout::from_size_align(self.size().checked_mul(n)?, self.align.get())
     }
@@ -272,6 +276,7 @@ impl Layout {
     ///  `extend`.)
     ///
     /// On arithmetic overflow, returns `None`.
+    #[inline]
     pub fn extend_packed(&self, next: Self) -> Option<(Self, usize)> {
         let new_size = self.size().checked_add(next.size())?;
         Some((Layout::from_size_align(new_size, self.align.get())?, self.size()))
@@ -280,6 +285,7 @@ impl Layout {
     /// Creates a layout describing the record for a `[T; n]`.
     ///
     /// On arithmetic overflow, returns `None`.
+    #[inline]
     pub fn array<T>(n: usize) -> Option<Self> {
         Layout::new::<T>().repeat(n).map(|(k, offs)| {
             debug_assert!(offs == mem::size_of::<T>());
@@ -663,6 +669,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
+    #[inline]
     unsafe fn alloc_excess(&mut self, layout: Layout) -> Result<Excess, AllocErr> {
         let usable_size = self.usable_size(layout);
         self.alloc(layout).map(|p| Excess(p, usable_size.1))
@@ -685,6 +692,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// reallocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
+    #[inline]
     unsafe fn realloc_excess(&mut self,
                              ptr: NonNull<u8>,
                              layout: Layout,
@@ -735,6 +743,7 @@ pub unsafe trait Alloc {
     /// method; clients are expected either to be able to recover from
     /// `resize_in_place` failures without aborting, or to fall back on
     /// another reallocation method before resorting to an abort.
+    #[inline]
     unsafe fn resize_in_place(&mut self,
                               ptr: NonNull<u8>,
                               layout: Layout,
@@ -777,6 +786,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
+    #[inline]
     fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> {
         let k = Layout::new::<T>();
         if k.size() > 0 {
@@ -803,6 +813,7 @@ pub unsafe trait Alloc {
     /// * `ptr` must denote a block of memory currently allocated via this allocator
     ///
     /// * the layout of `T` must *fit* that block of memory.
+    #[inline]
     unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) {
         let k = Layout::new::<T>();
         if k.size() > 0 { self.dealloc(ptr.as_ptr().cast(), k); }
@@ -840,6 +851,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// allocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
+    #[inline]
     fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> {
         match Layout::array::<T>(n) {
             Some(ref layout) if layout.size() > 0 => { unsafe {
@@ -884,6 +896,7 @@ pub unsafe trait Alloc {
     /// Clients wishing to abort computation in response to an
     /// reallocation error are encouraged to call the allocator's `oom`
     /// method, rather than directly invoking `panic!` or similar.
+    #[inline]
     unsafe fn realloc_array<T>(&mut self,
                                ptr: Unique<T>,
                                n_old: usize,
@@ -920,6 +933,7 @@ pub unsafe trait Alloc {
     /// constraints.
     ///
     /// Always returns `Err` on arithmetic overflow.
+    #[inline]
     unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> {
         match Layout::array::<T>(n) {
             Some(ref k) if k.size() > 0 => {
@@ -936,24 +950,24 @@ pub unsafe trait Alloc {
 pub struct NullAllocator(());
 
 unsafe impl Alloc for NullAllocator {
-    unsafe fn alloc(&mut self, _: Layout) -> Result<NonNull<u8>, AllocErr> { Err(AllocErr::Unsupported { details: "" }) }
-    unsafe fn dealloc(&mut self, _: NonNull<u8>, _: Layout) {}
+    #[inline] unsafe fn alloc(&mut self, _: Layout) -> Result<NonNull<u8>, AllocErr> { Err(AllocErr::Unsupported { details: "" }) }
+    #[inline] unsafe fn dealloc(&mut self, _: NonNull<u8>, _: Layout) {}
 }
 
 unsafe impl<A: Alloc + ?Sized, P: DerefMut<Target = A>> Alloc for P {
-    unsafe fn alloc(&mut self, l: Layout) -> Result<NonNull<u8>, AllocErr> { self.deref_mut().alloc(l) }
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, l: Layout) { self.deref_mut().dealloc(ptr, l) }
-    unsafe fn realloc(&mut self, ptr: NonNull<u8>, old_l: Layout, new_size: usize) -> Result<NonNull<u8>, AllocErr> { self.deref_mut().realloc(ptr, old_l, new_size) }
-    unsafe fn alloc_zeroed(&mut self, l: Layout) -> Result<NonNull<u8>, AllocErr> { self.deref_mut().alloc_zeroed(l) }
-    unsafe fn alloc_excess(&mut self, l: Layout) -> Result<Excess, AllocErr> { self.deref_mut().alloc_excess(l) }
-    unsafe fn realloc_excess(&mut self, ptr: NonNull<u8>, old_l: Layout, new_size: usize) -> Result<Excess, AllocErr> { self.deref_mut().realloc_excess(ptr, old_l, new_size) }
-    unsafe fn resize_in_place(&mut self, ptr: NonNull<u8>, old_l: Layout, new_size: usize) -> Result<(), CannotReallocInPlace> { self.deref_mut().resize_in_place(ptr, old_l, new_size) }
+    #[inline] unsafe fn alloc(&mut self, l: Layout) -> Result<NonNull<u8>, AllocErr> { self.deref_mut().alloc(l) }
+    #[inline] unsafe fn dealloc(&mut self, ptr: NonNull<u8>, l: Layout) { self.deref_mut().dealloc(ptr, l) }
+    #[inline] unsafe fn realloc(&mut self, ptr: NonNull<u8>, old_l: Layout, new_size: usize) -> Result<NonNull<u8>, AllocErr> { self.deref_mut().realloc(ptr, old_l, new_size) }
+    #[inline] unsafe fn alloc_zeroed(&mut self, l: Layout) -> Result<NonNull<u8>, AllocErr> { self.deref_mut().alloc_zeroed(l) }
+    #[inline] unsafe fn alloc_excess(&mut self, l: Layout) -> Result<Excess, AllocErr> { self.deref_mut().alloc_excess(l) }
+    #[inline] unsafe fn realloc_excess(&mut self, ptr: NonNull<u8>, old_l: Layout, new_size: usize) -> Result<Excess, AllocErr> { self.deref_mut().realloc_excess(ptr, old_l, new_size) }
+    #[inline] unsafe fn resize_in_place(&mut self, ptr: NonNull<u8>, old_l: Layout, new_size: usize) -> Result<(), CannotReallocInPlace> { self.deref_mut().resize_in_place(ptr, old_l, new_size) }
 
-    fn usable_size(&self, l: Layout) -> (usize, usize) { self.deref().usable_size(l) }
+    #[inline] fn usable_size(&self, l: Layout) -> (usize, usize) { self.deref().usable_size(l) }
 
-    fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_one() }
-    unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) { self.deref_mut().dealloc_one(ptr) }
-    fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().alloc_array(n) }
-    unsafe fn realloc_array<T>(&mut self, ptr: Unique<T>, old_n: usize, new_n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().realloc_array(ptr, old_n, new_n) }
-    unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> { self.deref_mut().dealloc_array(ptr, n) }
+    #[inline] fn alloc_one<T>(&mut self) -> Result<Unique<T>, AllocErr> { self.deref_mut().alloc_one() }
+    #[inline] unsafe fn dealloc_one<T>(&mut self, ptr: Unique<T>) { self.deref_mut().dealloc_one(ptr) }
+    #[inline] fn alloc_array<T>(&mut self, n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().alloc_array(n) }
+    #[inline] unsafe fn realloc_array<T>(&mut self, ptr: Unique<T>, old_n: usize, new_n: usize) -> Result<(Unique<T>, usize), AllocErr> { self.deref_mut().realloc_array(ptr, old_n, new_n) }
+    #[inline] unsafe fn dealloc_array<T>(&mut self, ptr: Unique<T>, n: usize) -> Result<(), AllocErr> { self.deref_mut().dealloc_array(ptr, n) }
 }
