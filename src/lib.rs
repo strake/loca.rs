@@ -197,8 +197,8 @@ impl Layout {
         // size and padding overflow in the above manner should cause
         // the allocator to yield an error anyway.)
 
-        let len_rounded_up = len.wrapping_add(align).wrapping_sub(1) & !align.wrapping_sub(1);
-        return len_rounded_up.wrapping_sub(len);
+        (len.wrapping_add(align).wrapping_sub(1) & !align.wrapping_sub(1))
+            .wrapping_sub(len)
     }
 
     /// Creates a layout describing the record for `n` instances of
@@ -320,7 +320,7 @@ pub enum AllocErr {
 impl AllocErr {
     #[inline]
     pub fn invalid_input(details: &'static str) -> Self {
-        AllocErr::Unsupported { details: details }
+        AllocErr::Unsupported { details }
     }
     #[inline]
     pub fn is_memory_exhausted(&self) -> bool {
@@ -612,7 +612,7 @@ pub unsafe trait Alloc {
                       new_size: usize) -> Result<NonNull<u8>, AllocErr> {
         let old_size = layout.size();
 
-        if let Ok(()) = self.resize_in_place(ptr, layout.clone(), new_size) {
+        if let Ok(()) = self.resize_in_place(ptr, layout, new_size) {
             return Ok(ptr);
         }
 
