@@ -201,6 +201,29 @@ impl Layout {
             .wrapping_sub(len)
     }
 
+    /// Returns a layout padded so the following address be aligned to
+    /// `align` (measured in bytes), assuming the memory block is also
+    /// aligned. It is equivalent to appending an array of
+    /// `self.padding_needed_for(align)` bytes.
+    ///
+    /// The return value of this function has no meaning if `align` is
+    /// not a power-of-two.
+    ///
+    /// Note that the utility of the returned value requires `align`
+    /// to be less than or equal to the alignment of the starting
+    /// address for the whole allocated block of memory. One way to
+    /// satisfy this constraint is to ensure `align <= self.align`.
+    #[inline]
+    pub fn pad_to(&self, align: NonZeroUsize) -> Self {
+        Layout {
+            size: {
+                let align = align.get();
+                self.size().wrapping_add(align).wrapping_sub(1) & !align.wrapping_sub(1)
+            },
+            align: self.align(),
+        }
+    }
+
     /// Creates a layout describing the record for `n` instances of
     /// `self`, with a suitable amount of padding between each to
     /// ensure that each instance is given its requested size and
