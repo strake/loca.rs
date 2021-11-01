@@ -10,8 +10,6 @@
 
 #![no_std]
 
-#![feature(const_fn)]
-
 extern crate ptr as ptr_;
 use ptr_::Unique;
 
